@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestão Interativa de Património - CFMSO</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    .accordion-content { transition: max-height 0.3s ease-out; }
+    .thumbnail-img { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; cursor: pointer; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen">
+
+  <!-- CABEÇALHO -->
+  <header class="bg-indigo-900 text-white p-4 shadow-md sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3">
+      <div>
+        <h1 class="text-xl font-bold flex items-center gap-2">
+          <i class="fa-solid fa-boxes-stacked"></i> Inventário de Património
+        </h1>
+        <p class="text-xs text-indigo-200">CF Maria Sebastiana - Controle por Ambientes e Subtópicos</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="configurarNuvem()" class="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-600 rounded text-xs font-semibold flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-cloud-arrow-up"></i> Configurar Nuvem de Fotos
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- CONTEÚDO PRINCIPAL -->
+  <main class="max-w-7xl mx-auto p-4 sm:p-6">
+    
+    <!-- BANNER DE STATUS DA NUVEM -->
+    <div id="cloud-status-banner" class="mb-6 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs flex justify-between items-center">
+      <span><i class="fa-solid fa-triangle-exclamation mr-1"></i> Configura o teu Cloud Name do Cloudinary para permitir o upload público de fotos.</span>
+      <button onclick="configurarNuvem()" class="underline font-bold hover:text-amber-900">Configurar Agora</button>
+    </div>
+
+    <!-- PAINEL DE MÉTRICAS -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <p class="text-xs text-slate-500 font-medium">Total de Itens</p>
+        <p id="kpi-total" class="text-2xl font-bold text-slate-800">0</p>
+      </div>
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <p class="text-xs text-slate-500 font-medium">Confirmados (OK)</p>
+        <p id="kpi-ok" class="text-2xl font-bold text-emerald-600">0</p>
+      </div>
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <p class="text-xs text-slate-500 font-medium">Sem Património</p>
+        <p id="kpi-sem-tag" class="text-2xl font-bold text-amber-600">0</p>
+      </div>
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <p class="text-xs text-slate-500 font-medium">Não Encontrados / Ausentes</p>
+        <p id="kpi-ausente" class="text-2xl font-bold text-rose-600">0</p>
+      </div>
+    </div>
+
+    <!-- CONTAINER DE AMBIENTES E SUBTÓPICOS -->
+    <div id="ambientes-container" class="space-y-6"></div>
+  </main>
+
+  <!-- MODAL DE VISUALIZAÇÃO DE FOTO EM TAMANHO REAL -->
+  <div id="foto-modal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center p-4" onclick="fecharFotoModal()">
+    <div class="relative max-w-3xl max-h-[90vh] bg-white rounded-xl p-3 shadow-2xl overflow-hidden" onclick="event.stopPropagation()">
+      <button onclick="fecharFotoModal()" class="absolute top-3 right-3 bg-slate-800 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-slate-700 z-10">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+      <img id="modal-img-element" src="" alt="Foto do Item" class="max-h-[75vh] w-auto rounded-lg object-contain mx-auto">
+      <p id="modal-img-caption" class="text-center text-sm font-semibold text-slate-700 mt-3"></p>
+    </div>
+  </div>
+
+  <script>
+    // Configurações do Cloudinary
+    let cloudName = localStorage.getItem('cloud_name') || '';
+    let uploadPreset = localStorage.getItem('upload_preset') || '';
+
+    // Estrutura do Banco de Dados
+    const dadosInventario = [
+      {
+        ambiente: "Sala de Reunião",
+        topicos: [
+          { nome: "Ponto Biométrico", itens: [ { id: "sr_pb1", desc: "Ponto Biométrico", tag: "", status: "Sem Patrimônio", obs: "" } ] },
+          { nome: "Ar Condicionado", itens: [
+            { id: "sr_ac1", desc: "Ar Condicionado", tag: "92401", status: "OK", obs: "" },
+            { id: "sr_ac2", desc: "Ar Condicionado", tag: "89194", status: "OK", obs: "" }
+          ] },
+          { nome: "Mesa", itens: [
+            { id: "sr_m1", desc: "Mesa", tag: "104951", status: "OK", obs: "" },
+            { id: "sr_m2", desc: "Mesa", tag: "105982", status: "OK", obs: "" },
+            { id: "sr_m3", desc: "Mesa", tag: "104953", status: "OK", obs: "" },
+            { id: "sr_m4", desc: "Mesa Jacque", tag: "", status: "Não Encontrado", obs: "Não achei" }
+          ] },
+          { nome: "Cadeira Fixa", itens: [
+            { id: "sr_cf1", desc: "Cadeira Fixa", tag: "106365", status: "OK", obs: "" },
+            { id: "sr_cf2", desc: "Cadeira Fixa", tag: "104969", status: "OK", obs: "" }
+          ] },
+          { nome: "Cadeira Espaldar", itens: [
+            { id: "sr_ce1", desc: "Cadeira Espaldar", tag: "84512", status: "OK", obs: "" },
+            { id: "sr_ce2", desc: "Cadeira Espaldar", tag: "4969", status: "OK", obs: "" },
+            { id: "sr_ce3", desc: "Cadeira Espaldar", tag: "180686", status: "OK", obs: "" },
+            { id: "sr_ce4", desc: "Cadeira perto da porta", tag: "", status: "Não Encontrado", obs: "Não tem" }
+          ] },
+          { nome: "Monitor LED", itens: [
+            { id: "sr_mon1", desc: "Monitor LED 19,5 POL", tag: "183409", status: "OK", obs: "" },
+            { id: "sr_mon2", desc: "Monitor LED 20 POL", tag: "102090", status: "OK", obs: "" },
+            { id: "sr_mon3", desc: "Monitor LED 20 POL", tag: "135630", status: "OK", obs: "" },
+            { id: "sr_mon4", desc: "Monitor LED 21,5 POL (Monitor Jacque)", tag: "", status: "Não Encontrado", obs: "Não tem" }
+          ] },
+          { nome: "CPU / Computador", itens: [
+            { id: "sr_cpu1", desc: "CPU", tag: "98499", status: "OK", obs: "" },
+            { id: "sr_cpu2", desc: "CPU", tag: "102118", status: "OK", obs: "" },
+            { id: "sr_cpu3", desc: "CPU", tag: "102094", status: "OK", obs: "" },
+            { id: "sr_cpu4", desc: "CPU", tag: "169685", status: "OK", obs: "" }
+          ] },
+          { nome: "Armário", itens: [
+            { id: "sr_arm1", desc: "Armário", tag: "104982", status: "OK", obs: "" },
+            { id: "sr_arm2", desc: "Armário", tag: "104990", status: "OK", obs: "" },
+            { id: "sr_arm3", desc: "Armário", tag: "104989", status: "OK", obs: "" },
+            { id: "sr_arm4", desc: "Armário do Meio", tag: "", status: "Não Encontrado", obs: "Não achei" },
+            { id: "sr_arm5", desc: "Armário da Direita", tag: "", status: "Não Encontrado", obs: "Não achei" }
+          ] },
+          { nome: "Arquivo", itens: [
+            { id: "sr_arq1", desc: "Arquivo", tag: "105983", status: "OK", obs: "" },
+            { id: "sr_arq2", desc: "Arquivo com os CNES", tag: "", status: "Não Encontrado", obs: "Não achei" }
+          ] },
+          { nome: "Mesa Impressora / Auxiliar", itens: [
+            { id: "sr_ma1", desc: "Mesa com 2 Gavetas", tag: "", status: "Sem Patrimônio", obs: "" },
+            { id: "sr_ma2", desc: "Mesa Impressora Rosi", tag: "", status: "Não Encontrado", obs: "Não achei" }
+          ] },
+          { nome: "Gaveteiro", itens: [ { id: "sr_gav1", desc: "Gaveteiro", tag: "", status: "Sem Patrimônio", obs: "" } ] },
+          { nome: "Estante", itens: [ { id: "sr_est1", desc: "Estante Mesa Impressora ADM", tag: "104939", status: "OK", obs: "" } ] }
+        ]
+      },
+      {
+        ambiente: "Copa",
+        topicos: [
+          { nome: "Mesa", itens: [
+            { id: "cp_m1", desc: "Mesa onde comemos", tag: "", status: "Não Encontrado", obs: "Não tem" },
+            { id: "cp_m2", desc: "Mesa do microondas (Mesa impressora)", tag: "108339", status: "OK", obs: "" }
+          ] },
+          { nome: "Ar Condicionado", itens: [
+            { id: "cp_ac1", desc: "Ar Condicionado", tag: "", status: "Não Encontrado", obs: "Não achei" }
+          ] }
+        ]
+      },
+      {
+        ambiente: "Odonto",
+        topicos: [
+          { nome: "Ar Condicionado", itens: [
+            { id: "od_ac1", desc: "Ar Condicionado", tag: "92409", status: "OK", obs: "" },
+            { id: "od_ac2", desc: "Ar Condicionado", tag: "89595", status: "OK", obs: "" }
+          ] },
+          { nome: "Monitor LED", itens: [
+            { id: "od_mon1", desc: "Monitor Adriana", tag: "", status: "Não Encontrado", obs: "Não tem" },
+            { id: "od_mon2", desc: "Monitor", tag: "102116", status: "OK", obs: "" },
+            { id: "od_mon3", desc: "Monitor", tag: "100409", status: "OK", obs: "" }
+          ] },
+          { nome: "CPU / Computador", itens: [
+            { id: "od_cpu1", desc: "CPU 107-108", tag: "", status: "Sem Patrimônio", obs: "" },
+            { id: "od_cpu2", desc: "CPU", tag: "169686", status: "OK", obs: "" },
+            { id: "od_cpu3", desc: "CPU", tag: "169687", status: "OK", obs: "" }
+          ] },
+          { nome: "Cadeira / Cadeira Espaldar", itens: [
+            { id: "od_cad1", desc: "Cadeira Lúcia", tag: "", status: "Sem Patrimônio", obs: "" },
+            { id: "od_cad2", desc: "Cadeira Espaldar Mesa Adriana", tag: "", status: "Não Encontrado", obs: "Não tem" },
+            { id: "od_cad3", desc: "Cadeira Espaldar", tag: "85492", status: "OK", obs: "" },
+            { id: "od_cad4", desc: "Cadeira Espaldar", tag: "108407", status: "OK", obs: "" },
+            { id: "od_cad5", desc: "Cadeira Espaldar", tag: "108404", status: "OK", obs: "" },
+            { id: "od_cad6", desc: "Cadeira Espaldar", tag: "108409", status: "OK", obs: "" },
+            { id: "od_cad7", desc: "Cadeira Giratória", tag: "", status: "Não Encontrado", obs: "Não achei" },
+            { id: "od_cad8", desc: "Cadeira Atender Paciente 1 (Perto da Lúcia)", tag: "21054", status: "OK", obs: "Viva Comunidade" },
+            { id: "od_cad9", desc: "Cadeira Atender Paciente 2", tag: "", status: "Não Encontrado", obs: "Não achei" },
+            { id: "od_cad10", desc: "Cadeira Atender Paciente 3", tag: "", status: "Não Encontrado", obs: "Não achei" }
+          ] },
+          { nome: "Ultrassom", itens: [
+            { id: "od_ult1", desc: "Ultrassom", tag: "106014", status: "OK", obs: "" },
+            { id: "od_ult2", desc: "Ultrassom", tag: "106015", status: "OK", obs: "" }
+          ] },
+          { nome: "Gaveteiro", itens: [
+            { id: "od_gav1", desc: "Gaveteiro", tag: "17873", status: "OK", obs: "Viva Comunidade" },
+            { id: "od_gav2", desc: "Gaveteiro", tag: "108410", status: "OK", obs: "" },
+            { id: "od_gav3", desc: "Gaveteiro", tag: "17872", status: "OK", obs: "Viva Comunidade" }
+          ] },
+          { nome: "Mesa com 2 Gavetas", itens: [
+            { id: "od_m1", desc: "Mesa Adriana", tag: "", status: "Não Encontrado", obs: "Não tem" },
+            { id: "od_m2", desc: "Mesa Perto da Porta", tag: "", status: "Não Encontrado", obs: "Não tem" },
+            { id: "od_m3", desc: "Mesa da Lúcia", tag: "109966", status: "OK", obs: "" }
+          ] },
+          { nome: "Negatoscópio", itens: [
+            { id: "od_neg1", desc: "Negatoscópio", tag: "47168", status: "OK", obs: "Viva Comunidade" },
+            { id: "od_neg2", desc: "Negatoscópio", tag: "43170", status: "OK", obs: "Viva Comunidade" },
+            { id: "od_neg3", desc: "Negatoscópio", tag: "43169", status: "OK", obs: "Viva Comunidade" }
+          ] },
+          { nome: "Armário", itens: [ { id: "od_arm1", desc: "Armário de Vidro", tag: "180396", status: "OK", obs: "" } ] },
+          { nome: "Bancada", itens: [
+            { id: "od_ban1", desc: "Bancada 1", tag: "44059", status: "OK", obs: "Viva Comunidade" },
+            { id: "od_ban2", desc: "Bancada 2", tag: "44060", status: "OK", obs: "Viva Comunidade" },
+            { id: "od_ban3", desc: "Bancada 3", tag: "44058", status: "OK", obs: "Viva Comunidade" }
+          ] },
+          { nome: "Frigobar", itens: [ { id: "od_frig1", desc: "Frigobar", tag: "180214", status: "OK", obs: "" } ] }
+        ]
+      },
+      {
+        ambiente: "Coleta",
+        topicos: [
+          { nome: "CPU / Computador", itens: [ { id: "col_cpu1", desc: "CPU", tag: "102094", status: "OK", obs: "" } ] },
+          { nome: "Mesa", itens: [
+            { id: "col_m1", desc: "Mesa c/ 2 Gavetas", tag: "", status: "Não Encontrado", obs: "Não achei" },
+            { id: "col_m2", desc: "Mesa 1", tag: "", status: "Não Encontrado", obs: "Não achei" },
+            { id: "col_m3", desc: "Mesa 2", tag: "", status: "Não Encontrado", obs: "Não achei" }
+          ] },
+          { nome: "Bancada", itens: [
+            { id: "col_ban1", desc: "Bancada 1", tag: "44053", status: "OK", obs: "Viva Comunidade" },
+            { id: "col_ban2", desc: "Bancada 2", tag: "", status: "Não Encontrado", obs: "Não achei" }
+          ] },
+          { nome: "Armário", itens: [ { id: "col_arm1", desc: "Armário de Vidro", tag: "", status: "Não Encontrado", obs: "Não achei" } ] },
+          { nome: "Ar Condicionado", itens: [ { id: "col_ac1", desc: "Ar Condicionado", tag: "", status: "Não Encontrado", obs: "Não achei" } ] },
+          { nome: "Cadeira Fixa", itens: [ { id: "col_cf1", desc: "3 Cadeira Paciente Coleta", tag: "", status: "Não Encontrado", obs: "Não achei" } ] }
+        ]
+      }
+    ];
+
+    function atualizarBannerStatus() {
+      const banner = document.getElementById('cloud-status-banner');
+      if (cloudName && uploadPreset) {
+        banner.className = "mb-6 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-xs flex justify-between items-center";
+        banner.innerHTML = `<span><i class="fa-solid fa-cloud-check mr-1"></i> Nuvem Conectada (Cloud Name: <strong>${cloudName}</strong>)</span>
+          <button onclick="configurarNuvem()" class="underline text-emerald-900 font-semibold">Alterar Configuração</button>`;
+      }
+    }
+
+    function configurarNuvem() {
+      const cName = prompt("Digita o teu Cloud Name do Cloudinary:", cloudName);
+      if (cName !== null) {
+        const uPreset = prompt("Digita o teu Upload Preset (Unsigned) do Cloudinary:", uploadPreset);
+        if (uPreset !== null) {
+          cloudName = cName.trim();
+          uploadPreset = uPreset.trim();
+          localStorage.setItem('cloud_name', cloudName);
+          localStorage.setItem('upload_preset', uploadPreset);
+          atualizarBannerStatus();
+          alert("Configurações salvas!");
+        }
+      }
+    }
+
+    function renderizarInventario() {
+      const container = document.getElementById('ambientes-container');
+      container.innerHTML = '';
+
+      let totalGeral = 0, totalOk = 0, totalSemTag = 0, totalAusente = 0;
+      let fotosSalvas = JSON.parse(localStorage.getItem('patrimonio_fotos') || '{}');
+
+      dadosInventario.forEach((amb, ambIdx) => {
+        let ambHTML = `
+          <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="bg-slate-800 text-white p-4 flex justify-between items-center cursor-pointer select-none" onclick="toggleAmbiente(${ambIdx})">
+              <h2 class="text-base font-bold flex items-center gap-2">
+                <i class="fa-solid fa-door-open text-indigo-400"></i> ${amb.ambiente}
+              </h2>
+              <i id="icon-amb-${ambIdx}" class="fa-solid fa-chevron-down transition-transform"></i>
+            </div>
+            <div id="amb-content-${ambIdx}" class="p-4 space-y-4 ${ambIdx === 0 ? '' : 'hidden'}">
+        `;
+
+        amb.topicos.forEach((topico) => {
+          ambHTML += `
+            <div class="border border-slate-200 rounded-lg overflow-hidden bg-slate-50">
+              <div class="bg-slate-200/80 px-3 py-2 border-b border-slate-200 font-semibold text-xs text-slate-700 flex justify-between">
+                <span><i class="fa-solid fa-folder text-indigo-600 mr-1.5"></i> ${topico.nome}</span>
+                <span class="text-slate-500 font-normal">${topico.itens.length} item(ns)</span>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                  <thead class="bg-slate-100 text-slate-500 uppercase border-b border-slate-200">
+                    <tr>
+                      <th class="p-2.5">Item / Descrição</th>
+                      <th class="p-2.5">Tombamento / Tag</th>
+                      <th class="p-2.5">Status</th>
+                      <th class="p-2.5">Observação</th>
+                      <th class="p-2.5 text-center">Foto</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-200 bg-white">
+          `;
+
+          topico.itens.forEach((item) => {
+            totalGeral++;
+            if (item.status === 'OK') totalOk++;
+            else if (item.status === 'Sem Patrimônio') totalSemTag++;
+            else if (item.status === 'Não Encontrado') totalAusente++;
+
+            let badgeClass = item.status === 'OK' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
+                             item.status === 'Sem Patrimônio' ? 'bg-amber-100 text-amber-800 border-amber-300' :
+                             'bg-rose-100 text-rose-800 border-rose-300';
+
+            let fotoUrl = fotosSalvas[item.id] || '';
+
+            ambHTML += `
+              <tr class="hover:bg-slate-50 transition">
+                <td class="p-2.5 font-medium text-slate-800">${item.desc}</td>
+                <td class="p-2.5 font-mono text-slate-600">${item.tag || '<span class="text-slate-300">-</span>'}</td>
+                <td class="p-2.5">
+                  <span class="px-2 py-0.5 rounded-full border text-[10px] font-bold ${badgeClass}">
+                    ${item.status}
+                  </span>
+                </td>
+                <td class="p-2.5 text-slate-500">${item.obs || ''}</td>
+                <td class="p-2.5 text-center">
+                  <div id="foto-container-${item.id}" class="flex items-center justify-center">
+                    ${fotoUrl ? 
+                      `<img src="${fotoUrl}" onclick="abrirFotoModal('${fotoUrl}', '${item.desc}')" class="thumbnail-img border border-slate-300 hover:scale-105 transition shadow-sm" title="Clique para expandir">` : 
+                      `<button onclick="fazerUploadFoto('${item.id}')" id="btn-upload-${item.id}" class="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded text-[11px] font-medium flex items-center gap-1 mx-auto transition">
+                        <i class="fa-solid fa-camera"></i> Anexar Foto
+                       </button>`
+                    }
+                  </div>
+                </td>
+              </tr>
+            `;
+          });
+
+          ambHTML += `
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `;
+        });
+
+        ambHTML += `
+            </div>
+          </div>
+        `;
+
+        container.innerHTML += ambHTML;
+      });
+
+      // Atualiza os contadores KPI
+      document.getElementById('kpi-total').innerText = totalGeral;
+      document.getElementById('kpi-ok').innerText = totalOk;
+      document.getElementById('kpi-sem-tag').innerText = totalSemTag;
+      document.getElementById('kpi-ausente').innerText = totalAusente;
+    }
+
+    function toggleAmbiente(idx) {
+      const content = document.getElementById(`amb-content-${idx}`);
+      const icon = document.getElementById(`icon-amb-${idx}`);
+      if (content.classList.contains('hidden')) {
+        content.classList.remove('hidden');
+        icon.classList.add('rotate-180');
+      } else {
+        content.classList.add('hidden');
+        icon.classList.remove('rotate-180');
+      }
+    }
+
+    async function fazerUploadFoto(itemId) {
+      if (!cloudName || !uploadPreset) {
+        alert("Por favor, clica no botão 'Configurar Nuvem de Fotos' e digita o teu Cloud Name e Upload Preset.");
+        configurarNuvem();
+        return;
+      }
+
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', uploadPreset);
+
+        const btn = document.getElementById(`btn-upload-${itemId}`);
+        if(btn) btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> A enviar...`;
+
+        try {
+          const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+            method: 'POST',
+            body: formData
+          });
+
+          const data = await response.json();
+          if (data.secure_url) {
+            salvarUrlFotoItem(itemId, data.secure_url);
+          } else {
+            alert("Erro ao enviar imagem. Verifica se o Cloud Name e Upload Preset estão corretos.");
+            if(btn) btn.innerHTML = `<i class="fa-solid fa-camera"></i> Anexar Foto`;
+          }
+        } catch (error) {
+          console.error("Erro no upload:", error);
+          alert("Erro de conexão ao enviar imagem.");
+          if(btn) btn.innerHTML = `<i class="fa-solid fa-camera"></i> Anexar Foto`;
+        }
+      };
+      input.click();
+    }
+
+    function salvarUrlFotoItem(itemId, url) {
+      let fotosSalvas = JSON.parse(localStorage.getItem('patrimonio_fotos') || '{}');
+      fotosSalvas[itemId] = url;
+      localStorage.setItem('patrimonio_fotos', JSON.stringify(fotosSalvas));
+      
+      const container = document.getElementById(`foto-container-${itemId}`);
+      if (container) {
+        container.innerHTML = `
+          <img src="${url}" onclick="abrirFotoModal('${url}', 'Foto do Item')" class="thumbnail-img border border-slate-300 hover:scale-105 transition shadow-sm" title="Clique para expandir">
+        `;
+      }
+    }
+
+    function abrirFotoModal(url, legenda) {
+      document.getElementById('modal-img-element').src = url;
+      document.getElementById('modal-img-caption').innerText = legenda;
+      document.getElementById('foto-modal').classList.remove('hidden');
+    }
+
+    function fecharFotoModal() {
+      document.getElementById('foto-modal').classList.add('hidden');
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      atualizarBannerStatus();
+      renderizarInventario();
+    });
+  </script>
+</body>
+</html>
